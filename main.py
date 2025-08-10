@@ -1,24 +1,26 @@
+import asyncio
+import json
 import os
 import uuid
+
 import yt_dlp
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-from pydantic import Field
-import threading
-from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+from mcp.types import TextContent
+from pydantic import Field, BaseModel
+
+from file_server import start_file_server
 
 load_dotenv()
-vercel_url = os.getenv("VERCEL_URL")
-file_server_url = os.getenv("FILE_SERVER_URL", f"https://{vercel_url}/files")
+file_server_url = os.getenv("FILE_SERVER_URL")
+file_server_port = os.getenv("FILE_SERVER_PORT")
 output_dir = os.path.join(os.getcwd(), "files")
 os.makedirs(output_dir, exist_ok=True)
 
 mcp = FastMCP(
-    name="DownBot",
+    name="Media downloader server",
     instructions="""
-        # DownBot - Media Downloader
-
-        I help you download videos and audio from many popular websites.
+        I help you download videos and audio from provided website url.
 
         ## What I can do:
         - Download videos (at 480p quality)
@@ -33,6 +35,13 @@ mcp = FastMCP(
 
         ## Usage:
         Simply provide a URL to any supported media and I'll download it for you.
+
+        ### IMPORTANT:
+        When responding to the user, you must reply **only** with beautifully formatted markdown,
+        matching the following format exactly:
+                "✅ **Download Complete!**\n"
+                f"🎬 **Type**: {media_type}\n"
+                f"📁 **File**: [Click here to download]({file_server_url}/{final_name})\n"
     """
 )
 
@@ -42,24 +51,33 @@ async def validate() -> str:
     return "916386617608"
 
 
-@mcp.prompt(
+class RichToolDescription(BaseModel):
+    description: str
+    use_when: str
+    side_effects: str | None = None
+
+
+DOWNLOAD_TASK_DESCRIPTION = RichToolDescription(
+    description="Download media from a URL. Supports YouTube, Instagram, Twitter, Jio Savan, Vimeo, Spotify, SoundCloud, and more. strictly follow the output format",
+    use_when="The user provides a URL to download media content.",
+    side_effects="The tool will download the media file to the server and provide a download link in a beautifully formatted message"
+)
+
+
+@mcp.tool(
     name="downloader",
-    description="Download media from a URL. Supports YouTube, Instagram, Twitter, Jio Savan, Vimeo, Spotify, SoundCloud, and more.",
-    tags={"media", "download", "video", "audio"}
+    description=DOWNLOAD_TASK_DESCRIPTION.model_dump_json()
 )
 async def downloader_tool(
         url: str = Field(description="The URL of the media to download."),
         only_audio: bool = Field(description="If true, only audio is downloaded.", default=False)
-) -> dict:
-    # Create a unique base filename
+) -> list[TextContent]:
     unique_name = str(uuid.uuid4())
 
-    # Format selection based on onlyAudio parameter
     if only_audio:
         fmt = "bestaudio"
         merge_format = "mp3"
     else:
-        # Format selection: video at ≤480p + the best audio; fallback to audio-only for non-video URLs
         fmt = "bestvideo[height<=480]+bestaudio/best[height<=480]/bestaudio"
         merge_format = "mp4"
 
@@ -72,7 +90,6 @@ async def downloader_tool(
         "ignoreerrors": False,
     }
 
-    # Add audio extraction post-processor if onlyAudio is True
     if only_audio:
         ydl_opts.update({
             "postprocessors": [{
@@ -87,37 +104,47 @@ async def downloader_tool(
             info = ydl.extract_info(url, download=True)
 
         if not info:
-            return {"success": False, "message": "Failed to download video file."}
+            resp = {
+                "success": False,
+                "message": "No media found at the provided URL.",
+                "download_url": None,
+                "type": None,
+            }
+            return [TextContent(type="text", text=json.dumps(resp))]
 
         ext = info.get("ext", "media")
         final_name = f"{unique_name}.{ext}"
 
-        return {
+        is_audio = only_audio or (info.get("acodec") and not info.get("vcodec"))
+        media_type = "audio" if is_audio else "video"
+
+        resp = {
             "success": True,
-            "message": "Download completed successfully, you can access the file via the provided URL.",
+            "message": (
+                "✅ **Download Complete!**\n"
+                f"🎬 **Type**: {media_type}\n"
+                f"📁 **File**: [Click here to download]({file_server_url}/{final_name})\n"
+            ),
             "download_url": f"{file_server_url}/{final_name}",
-            "type": "audio" if only_audio or (info.get("acodec") and not info.get("vcodec")) else "video"
+            "type": media_type,
         }
+
+        return [TextContent(type="text", text=json.dumps(resp))]
 
     except Exception as e:
-        return {
+        resp = {
             "success": False,
-            "message": f"Error during download: {e}"
+            "message": f"Error during download: {e}",
+            "download_url": None,
+            "type": None,
         }
+        return [TextContent(type="text", text=json.dumps(resp))]
 
 
-def start_file_server():
-    class FilesHandler(SimpleHTTPRequestHandler):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory=output_dir, **kwargs)
-
-    server_address = ("", 7676)
-    httpd = ThreadingHTTPServer(server_address, FilesHandler)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-    return httpd
+async def main():
+    start_file_server(int(file_server_port))
+    await mcp.run_async("streamable-http", host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":
-    start_file_server()
-    mcp.run(transport="http", port=7070)
+    asyncio.run(main())
