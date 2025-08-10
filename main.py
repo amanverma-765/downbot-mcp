@@ -8,7 +8,8 @@ import threading
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 load_dotenv()
-file_server_url = os.getenv("FILE_SERVER_URL", "http://localhost:7676/files")
+vercel_url = os.getenv("VERCEL_URL")
+file_server_url = os.getenv("FILE_SERVER_URL", f"https://{vercel_url}/files")
 output_dir = os.path.join(os.getcwd(), "files")
 os.makedirs(output_dir, exist_ok=True)
 
