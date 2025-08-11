@@ -56,10 +56,33 @@ class RichToolDescription(BaseModel):
 
 
 DOWNLOAD_TASK_DESCRIPTION = RichToolDescription(
-    description="🎬 Download any videos and audio. \n 🌐 Supports popular platforms like YouTube, Instagram, Twitter, Vimeo, Spotify, SoundCloud and many more. \n 🔗 Downloads are provided as convenient direct links. \n ⌨️ Simply paste the URL of any video you want to download.",
+    description="🎬 Download any videos and audio. \n 🌐 Supports popular platforms like YouTube, Instagram, Twitter, Vimeo, JioSavan, SoundCloud and many more. \n 🔗 Downloads are provided as convenient direct links. \n ⌨️ Simply paste the URL of any video you want to download.",
     use_when="💾 The user wants to download or save media content from a website URL. 🎥 Perfect for saving videos, 🎵 music, or 🎧 audio tracks for 📱 offline access.",
     side_effects="The tool will download the media file to the server and provide a download link in a beautifully formatted message"
 )
+
+
+def is_playlist(url) -> bool:
+    ydl_opts = {
+        'quiet': True,
+        'extract_flat': True,  # only get metadata, no download
+        'skip_download': True,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+        except Exception as e:
+            print(f"Error extracting info: {e}")
+            return False
+
+    # Some sites return 'entries' for playlists, or '_type' as 'playlist' or 'multi_video'
+    if isinstance(info, dict):
+        if info.get('_type') in ('playlist', 'multi_video'):
+            return True
+        # Also check if 'entries' key exists and is a list
+        if 'entries' in info and isinstance(info['entries'], list):
+            return True
+    return False
 
 
 @mcp.tool(
@@ -74,13 +97,21 @@ async def downloader_tool(
         unique_id = str(uuid.uuid4())
         temp_path = f"/tmp/{unique_id}"
 
+        if is_playlist(url):
+            return [
+                TextContent(
+                    type="text",
+                    text=f"❌ Playlists are not supported. Please provide a single media URL."
+                )
+            ]
+
         ydl_opts = {
             'format': 'best[height<=720]/best',
             'outtmpl': f'{temp_path}.%(ext)s',
             'writeinfojson': False,
             'writesubtitles': False,
             'writeautomaticsub': False,
-            'playlist-items': 1,
+            'ignore_playlist': True,
             'ignoreerrors': False,
             'cookies': 'cookies.txt',
         }
