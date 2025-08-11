@@ -1,8 +1,9 @@
 import asyncio
 import json
+import logging
 import os
 import uuid
-import logging
+
 import yt_dlp
 from dotenv import load_dotenv
 from fastmcp import FastMCP
@@ -68,7 +69,6 @@ DOWNLOAD_TASK_DESCRIPTION = RichToolDescription(
 async def downloader_tool(
         url: str = Field(description="The URL of the media to download.")
 ) -> list[TextContent]:
-
     try:
         # Configure yt-dlp for temporary download
         unique_id = str(uuid.uuid4())
@@ -168,10 +168,18 @@ async def downloader_tool(
         }
         return [TextContent(type="text", text=json.dumps(resp))]
 
+
 async def main():
     logger.info("Starting Media Downloader MCP Server...")
     logger.info(f"Wasabi bucket: {wasabi_storage.bucket_name}")
-    await mcp.run_async("streamable-http", host="0.0.0.0", port=8000)
+
+    # Get port and host from environment variables
+    port = int(os.getenv("PORT", 8000))
+    host = os.getenv("HOST", "0.0.0.0")
+
+    logger.info(f"Starting server on {host}:{port}")
+    await mcp.run_async("streamable-http", host=host, port=port)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
