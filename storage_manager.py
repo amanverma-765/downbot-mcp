@@ -140,19 +140,24 @@ class WasabiStorageManager:
             raise Exception(f"Unexpected upload error: {str(e)}")
 
     def get_file_url(self, file_key: str, expiration: int = 3600) -> str:
-        """Generate a presigned URL for file access"""
+        """Generate a presigned URL for file download"""
         try:
             # Check if file exists first
             self.s3_client.head_object(Bucket=self.bucket_name, Key=file_key)
 
-            # Generate presigned URL
+            # Generate presigned URL forcing download
             url = self.s3_client.generate_presigned_url(
                 'get_object',
-                Params={'Bucket': self.bucket_name, 'Key': file_key},
+                Params={
+                    'Bucket': self.bucket_name,
+                    'Key': file_key,
+                    'ResponseContentDisposition': 'attachment',  # 👈 Force download
+                    'ResponseContentType': 'application/octet-stream'  # 👈 Generic binary type
+                },
                 ExpiresIn=expiration
             )
 
-            logger.info(f"Generated presigned URL for {file_key}, expires in {expiration} seconds")
+            logger.info(f"Generated presigned URL for {file_key} (forced download), expires in {expiration} seconds")
             return url
 
         except ClientError as e:

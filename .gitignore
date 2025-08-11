@@ -22,3 +22,4 @@ __pycache__/
 *.rar
 *.tar.bz2
 files
+/cookies.txt

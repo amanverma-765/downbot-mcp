@@ -80,8 +80,9 @@ async def downloader_tool(
             'writeinfojson': False,
             'writesubtitles': False,
             'writeautomaticsub': False,
-            'noplaylist': True,
+            'playlist-items': 1,
             'ignoreerrors': False,
+            'cookies': 'cookies.txt',
         }
 
         logger.info(f"Starting download from URL: {url}")
