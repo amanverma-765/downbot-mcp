@@ -1,6 +1,7 @@
 import logging
 import os
 import uuid
+import re
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from dotenv import load_dotenv
@@ -91,6 +92,16 @@ class WasabiStorageManager:
             logger.error("No credentials found. Please check your Wasabi access key and secret key.")
             raise
 
+    def _sanitize_filename_for_metadata(self, filename: str) -> str:
+        """Sanitize filename to contain only ASCII characters for S3 metadata"""
+        # Remove or replace non-ASCII characters
+        sanitized = re.sub(r'[^\x00-\x7F]+', '_', filename)
+        # Replace multiple underscores with single underscore
+        sanitized = re.sub(r'_{2,}', '_', sanitized)
+        # Remove leading/trailing underscores
+        sanitized = sanitized.strip('_')
+        return sanitized
+
     def upload_file(self, file_content: bytes, filename: str, content_type: str = None) -> str:
         """Upload file to Wasabi and return the file key"""
         # Generate unique file key with original extension
@@ -103,9 +114,10 @@ class WasabiStorageManager:
             if content_type:
                 extra_args['ContentType'] = content_type
 
-            # Add metadata for better file management
+            # Add metadata for better file management - sanitize filename for ASCII compliance
+            sanitized_filename = self._sanitize_filename_for_metadata(filename)
             extra_args['Metadata'] = {
-                'original_filename': filename,
+                'original_filename': sanitized_filename,
                 'upload_timestamp': str(uuid.uuid4().time_low)
             }
 
