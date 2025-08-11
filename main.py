@@ -163,6 +163,11 @@ async def cleanup_file(file_path: str):
     await loop.run_in_executor(executor, _cleanup_file_sync, file_path)
 
 
+@mcp.tool
+async def about() -> dict:
+    return {"name": "Video downloader", "description": "Download videos and audio from instagram, youtube, twitter, vimeo, spotify, soundcloud and many more websites."}
+
+
 @mcp.tool(
     name="video downloader",
     description=DOWNLOAD_TASK_DESCRIPTION.model_dump_json()
