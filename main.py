@@ -5,6 +5,7 @@ import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+from urllib.parse import urlparse
 
 import yt_dlp
 from dotenv import load_dotenv
@@ -63,8 +64,26 @@ class RichToolDescription(BaseModel):
 
 DOWNLOAD_TASK_DESCRIPTION = RichToolDescription(
     description="🎬 Download any videos and audio concurrently. \n 🌐 Supports popular platforms like YouTube, Instagram, Twitter, Vimeo, JioSavan, SoundCloud and many more. \n 🔗 Downloads are provided as convenient direct links. \n ⌨️ Simply paste the URL of any video you want to download. \n ⚡ Now supports multiple concurrent users!",
-    use_when="💾 The user wants to download or save media content from a website URL. 🎥 Perfect for saving videos, 🎵 music, or 🎧 audio tracks for 📱 offline access.",
-    side_effects="The tool will download the media file to the server and provide a download link in a beautifully formatted message. Multiple users can download simultaneously."
+    use_when="""
+    <Important>:
+    Only use the video downloader tool if the input contains a valid URL that starts explicitly with http:// or https:// otherwise start with any other tool.
+    If the input URL does not begin with http:// or https://, do not invoke the downloader tool and instead check if any other tool can handle that.
+    Under no circumstances should you attempt to download or process URLs without this scheme prefix.
+                
+    **URL IS REQUIRED:**
+    Use this tool strictly only to download media content when a valid URL is provided otherwise try other tools.
+    If no URL is given, try to use any other tool which can handle it.
+
+    💾 The user wants to download or save media content from a website URL. 🎥 Perfect for saving videos, 🎵 music, or 🎧 audio tracks for 📱 offline access.
+    
+    Important:
+    Only use the video downloader tool if the input contains a valid URL that starts explicitly with http:// or https://.
+    If the input URL does not begin with http:// or https://, do not invoke the downloader tool and instead check if any other tool can handle that.
+    Under no circumstances should you attempt to download or process URLs without this scheme prefix.
+
+    Only process download requests when a URL is explicitly provided. Otherwise, do not proceed.
+    """,
+    side_effects="The tool will download the media file and provide a download link in a beautifully formatted message. Multiple users can download simultaneously."
 )
 
 
@@ -163,25 +182,51 @@ async def cleanup_file(file_path: str):
     await loop.run_in_executor(executor, _cleanup_file_sync, file_path)
 
 
+def is_valid_url(url: str) -> bool:
+    try:
+        result = urlparse(url)
+        return all([result.scheme in ("http", "https"), result.netloc])
+    except Exception:
+        return False
+
+
 @mcp.tool
 async def about() -> dict:
-    return {"name": "Video downloader", "description": "Download videos and audio from instagram, youtube, twitter, vimeo, spotify, soundcloud and many more websites."}
+    return {"name": "Video downloader",
+            "description": "Download videos and audio from instagram, youtube, twitter, vimeo, spotify, soundcloud and many more websites."}
 
 
 @mcp.tool(
-    name="video downloader using url",
+    name="video downloader from url",
     description=DOWNLOAD_TASK_DESCRIPTION.model_dump_json()
 )
 async def downloader_tool(
-        url: str = Field(description="The URL of the media to download.")
+        url: str = Field(description="""
+                **URL IS REQUIRED:**
+                Important:
+                Only use the video downloader tool if the input contains a valid URL that starts explicitly with http:// or https:// otherwise start with any other tool.
+                If the input URL does not begin with http:// or https://, do not invoke the downloader tool and instead check if any other tool can handle that.
+                Under no circumstances should you attempt to download or process URLs without this scheme prefix.
+                Strictly The URL of the media to download. dont use this tool if no URL is provided."""
+             )
 ) -> list[TextContent]:
+    # Configure paths with unique ID for this request
+    unique_id = str(uuid.uuid4())
+    temp_path = f"/tmp/{unique_id}"
+    logger.info(f"[{unique_id}] Starting download from URL: {url}")
+
+    # Validate URL format before proceeding
+    if not url or not is_valid_url(url):
+        resp = {
+            "success": False,
+            "message": (
+                "❌ Invalid URL provided. Please retry your request with a valid URL starting with http:// or https://."
+            )
+        }
+        logger.warning(f"[{unique_id}] Invalid URL input: {url}")
+        return [TextContent(type="text", text=json.dumps(resp))]
+
     try:
-        # Configure paths with unique ID for this request
-        unique_id = str(uuid.uuid4())
-        temp_path = f"/tmp/{unique_id}"
-
-        logger.info(f"[{unique_id}] Starting download from URL: {url}")
-
         # Check if it's a playlist (async)
         if await is_playlist(url):
             return [
