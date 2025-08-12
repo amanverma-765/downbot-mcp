@@ -53,6 +53,8 @@
 ```bash
 git clone https://github.com/amanverma-765/downbot-mcp.git
 cd downbot-mcp
+uv sync
+python main.py
 ```
 
 Build and run your MCP server following the included instructions.
