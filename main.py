@@ -27,7 +27,7 @@ wasabi_storage = AsyncWasabiStorageManager(max_workers=5)
 executor = ThreadPoolExecutor(max_workers=10)  # Adjust based on your needs
 
 mcp = FastMCP(
-    name="Media Downloader",
+    name="Video Downloader by URL",
     instructions="""
         I help you download videos and audio from provided website URLs concurrently.
 
@@ -169,7 +169,7 @@ async def about() -> dict:
 
 
 @mcp.tool(
-    name="video downloader",
+    name="video downloader using url",
     description=DOWNLOAD_TASK_DESCRIPTION.model_dump_json()
 )
 async def downloader_tool(
